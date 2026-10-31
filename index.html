@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Чат">
+<title>Чат</title>
+<style>
+  :root { --bg:#fff; --fg:#111; --me:#0a84ff; --other:#e9e9ee; --bar:#f6f6f8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#000; --fg:#f2f2f2; --other:#2c2c2e; --bar:#1c1c1e; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 16px -apple-system, system-ui, sans-serif;
+         display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+  header { padding: 12px 16px; background: var(--bar); font-weight: 600; text-align: center; }
+  #msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .m { max-width: 78%; padding: 8px 12px; border-radius: 18px; background: var(--other); word-wrap: break-word; }
+  .m.me { align-self: flex-end; background: var(--me); color: #fff; }
+  .n { font-size: 12px; opacity: .6; margin-bottom: 2px; }
+  form { display: flex; gap: 8px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); background: var(--bar); }
+  input { flex: 1; font-size: 16px; padding: 10px 14px; border-radius: 20px; border: 0; background: var(--bg); color: var(--fg); }
+  button { border: 0; border-radius: 20px; background: var(--me); color: #fff; font-size: 16px; padding: 0 16px; }
+  #login { margin: auto; display: flex; flex-direction: column; gap: 12px; width: 80%; max-width: 320px; }
+  #login input { background: var(--bar); padding: 14px; }
+  #login button { padding: 14px; }
+</style>
+</head>
+<body>
+<div id="login">
+  <h2 style="text-align:center;margin:0">Как тебя зовут?</h2>
+  <input id="nick" placeholder="Имя" maxlength="20">
+  <button id="go">Войти</button>
+</div>
+<div id="chat" style="display:none;flex:1;flex-direction:column;min-height:0">
+  <header>Общий чат</header>
+  <div id="msgs"></div>
+  <form id="f">
+    <input id="t" placeholder="Сообщение" autocomplete="off">
+    <button>→</button>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+// 1. ВСТАВЬ СВОИ ДАННЫЕ из Supabase: Project Settings → API
+const SUPABASE_URL = "https://dyqmsormwafsxhowidhl.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ib17Oe8kbf_C3RtbnfdFmg_HOTiTcsO";
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+let me = localStorage.getItem("nick");
+
+function add(m) {
+  const d = document.createElement("div");
+  d.className = "m" + (m.name === me ? " me" : "");
+  if (m.name !== me) {
+    const n = document.createElement("div");
+    n.className = "n"; n.textContent = m.name; d.appendChild(n);
+  }
+  d.appendChild(document.createTextNode(m.text));
+  $("msgs").appendChild(d);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+}
+
+async function start() {
+  $("login").style.display = "none";
+  $("chat").style.display = "flex";
+  const { data } = await db.from("messages").select("*").order("id", { ascending: false }).limit(100);
+  (data || []).reverse().forEach(add);
+  db.channel("room").on("postgres_changes",
+    { event: "INSERT", schema: "public", table: "messages" },
+    p => add(p.new)).subscribe();
+}
+
+$("go").onclick = () => {
+  const v = $("nick").value.trim();
+  if (!v) return;
+  me = v; localStorage.setItem("nick", v); start();
+};
+
+$("f").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("t").value.trim();
+  if (!text) return;
+  $("t").value = "";
+  await db.from("messages").insert({ name: me, text });
+};
+
+if (me) start();
+</script>
+</body>
+</html>
